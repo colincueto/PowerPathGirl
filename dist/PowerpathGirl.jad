@@ -1,6 +1,6 @@
-MIDlet-1: MainMIDlet, , MainMIDlet
-MIDlet-Jar-Size: 8415
-MIDlet-Jar-URL: Powerpath_Girl.jar
+MIDlet-1: MainMIDlet,/img/PPGico.jpg,MainMIDlet
+MIDlet-Jar-Size: 262512
+MIDlet-Jar-URL: PowerpathGirl.jar
 MIDlet-Name: Powerpath Girl
 MIDlet-Vendor: Vendor
 MIDlet-Version: 1.0

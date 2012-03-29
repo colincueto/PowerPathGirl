@@ -1,4 +1,4 @@
-MIDlet-1: MainMIDlet, , MainMIDlet
+MIDlet-1: MainMIDlet,/img/PPGico.jpg,MainMIDlet
 MIDlet-Vendor: Vendor
 MIDlet-Name: Powerpath Girl
 MIDlet-Version: 1.0

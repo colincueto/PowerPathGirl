@@ -9,7 +9,7 @@ public class BSearch {
         
         for (int i = 0; i < bList.length; i++){
             for (int j = 0; j < 5 && !found; j++){
-                if (bList[i].keys[j].equals(key)){
+                if (bList[i].keys[j].equalsIgnoreCase(key)){
                     found = true;
                     resultV.addElement(new Integer(i));
                 }

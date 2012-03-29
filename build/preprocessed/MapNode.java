@@ -1,11 +1,10 @@
 public class MapNode{
-	byte bindex;
-	short dist;
+	int dist, bindex, indexFrom;
 	MapNode next;
 	
-	MapNode(byte bindex, short dist){
+	MapNode(int bindex, int indexFrom, Buildings[] b){
 		this.bindex = bindex;
-		this.dist = dist;
+		this.dist = (int) Math.sqrt(((b[bindex].absX-b[indexFrom].absX)*(b[bindex].absX-b[indexFrom].absX)) + ((b[bindex].absX-b[indexFrom].absX)*(b[bindex].absX-b[indexFrom].absX)));
 		this.next = null;
 	}
 }

@@ -1,3 +1,4 @@
+import java.io.IOException;
 import javax.microedition.midlet.*;
 import javax.microedition.lcdui.*;
 import java.util.Vector;
@@ -6,17 +7,22 @@ public class MainMIDlet extends MIDlet implements CommandListener, ItemStateList
 	private boolean midletPaused = false;
 	
 	private List startMenu, selectList;
-	private Command endApp, backToMenu, searchPath, select, backToInput;
-	private Form inputScreen, browseScreen, aboutScreen;
+	private Command endApp, backToMenu, searchPath, select, backToInput, clearInput, switcher;
+	private Form inputScreen, browseScreen, aboutScreen, directions;
 	private TextField startLoc, endLoc;
-	private StringItem status, aboutText, idxText;
+	private StringItem status, aboutText, idxText, dir;
 	private String startText, endText;
+	private MapScreen mapScreen;
 	
 	Buildings[] bList;
-	byte signal;
+	byte signal, sswitch;
 	int sidx, eidx;
-	int[] bldg;
+	int[] bldg, minPath, jMinPath;
 	Vector minpath;
+	
+	WPF wpf;
+	JPF jpf;
+	MapList[] graph;
 	
 	public void commandAction(Command command, Displayable displayable) {
 		if (displayable == startMenu) {
@@ -31,13 +37,13 @@ public class MainMIDlet extends MIDlet implements CommandListener, ItemStateList
 			if (command == List.SELECT_COMMAND) {
 				String selected = selectListAction();
 				if (signal==0){
-					startLoc.setString(selected);
+					getStartLoc().setString(selected);
 					this.sidx = bldg[sidx];
 					System.out.println("Start:"+sidx+" "+bList[sidx].keys[0]);
 					this.signal = 1;
 				}
 				else {
-					endLoc.setString(selected);
+					getEndLoc().setString(selected);
 					this.eidx = bldg[eidx];
 					System.out.println("End: "+eidx+" "+bList[eidx].keys[0]);
 					this.signal = 0;
@@ -59,10 +65,16 @@ public class MainMIDlet extends MIDlet implements CommandListener, ItemStateList
 				status.setText("");
 				switchDisplayable(null,getStartMenu());
 			}
+			else if (command == clearInput) {
+				getStartLoc().setString("");
+				getEndLoc().setString("");
+				this.signal = 0;
+				status.setText("");
+			}
 			else if (command == searchPath) {
 				this.signal = 0;
-				startText = startLoc.getString();
-				endText = endLoc.getString();
+				startText = getStartLoc().getString();
+				endText = getEndLoc().getString();
 				if (startText.equals("") && endText.equals("")) {
 					status.setText("Cannot accept empty values.");
 				}
@@ -79,18 +91,26 @@ public class MainMIDlet extends MIDlet implements CommandListener, ItemStateList
 					status.setText("Ending Location is not recognized.");
 				}
 				else {
-					String m = "";
-					m = m.concat("\nFrom: "+bList[sidx].keys[0]);
-					m = m.concat("\nTo: "+bList[eidx].keys[0]);
-					status.setText(m);
-					
-					
-					
-					/**
-						PLACE FUNCTIONS HERE
-					**/
-					
-					switchDisplayable(null,inputScreen);
+					try {
+						String m = "";						
+						wpf.init();
+						wpf.findPath(this.sidx, this.eidx, 0);
+						minpath = wpf.minPath;
+						minPath = new int[minpath.size()+1];
+						minPath[0] = -1;
+						for (int i=1; i<minpath.size()+1; i++) {
+							Integer x = (Integer) minpath.elementAt(i-1);
+							minPath[i] = x.intValue();
+						}
+						status.setText(m);
+						jMinPath = jpf.findPath(this.sidx, this.eidx);
+						sswitch = 0;
+						getMapScreen().setResult(minPath, "Walking");
+						
+						switchDisplayable(null,getMapScreen());
+					} catch (IOException ex) {
+						ex.printStackTrace();
+					}
 				}
 			}
 		}
@@ -104,7 +124,42 @@ public class MainMIDlet extends MIDlet implements CommandListener, ItemStateList
 				switchDisplayable(null,getStartMenu());
 			}
 		}
+		else if (displayable == directions) {
+			if (command == backToInput) {
+				switchDisplayable(null,getInputScreen());
+			}
+			else if (command == switcher) {
+				if (sswitch == 1) {
+					sswitch = 0;
+					mapScreen.setResult(minPath, "Walking");
+					switchDisplayable(null,mapScreen);
+				}
+			}
+		}
+		else if (displayable == mapScreen) {
+			if (command == backToInput) {
+				switchDisplayable(null,getInputScreen());
+			}
+			else if (command == switcher){
+				if (jMinPath.length == 0 && sswitch == 0) {
+						getDirectionText().setText("No Jeep passing both locations.");
+						switchDisplayable(null,getDirections());
+						sswitch = 1;
+				}
+				else if (jMinPath.length >0 && sswitch == 0) {
+					sswitch = 1;
+					mapScreen.setResult(jMinPath, jpf.jeep[jMinPath[0]].name);
+					switchDisplayable(null,mapScreen);
+				}
+				else if (sswitch == 1) {
+					sswitch = 0;					
+					mapScreen.setResult(minPath, "Walking");
+					switchDisplayable(null,mapScreen);
+				}
+			}
+		}
 	}
+		
 	public String selectListAction() {
 		String __selectedString = getSelectList().getString(getSelectList().getSelectedIndex());
 		if (signal==0) this.sidx = getSelectList().getSelectedIndex();
@@ -114,22 +169,25 @@ public class MainMIDlet extends MIDlet implements CommandListener, ItemStateList
 	public void chooseInMenu() {
 		String __selectedString = getStartMenu().getString(getStartMenu().getSelectedIndex());
 		if (__selectedString != null) {
-			if (__selectedString.equals("Search")) {
-				switchDisplayable(null, getInputScreen());
-			}
-			else if (__selectedString.equals("Browse")) {
-				switchDisplayable(null, getBrowseScreen());
-			}
-			else if (__selectedString.equals("About")) {
-				switchDisplayable(null, getAboutScreen());
-			}
+			if (__selectedString.equals("Search")) switchDisplayable(null, getInputScreen());
+			else if (__selectedString.equals("Help")) switchDisplayable(null, getBrowseScreen());
+			else if (__selectedString.equals("About")) switchDisplayable(null, getAboutScreen());
 		}
+	}
+	public MapScreen getMapScreen() throws IOException {
+		if (mapScreen == null) {
+			mapScreen = new MapScreen(bList);
+			mapScreen.addCommand(getBackToInput());
+			mapScreen.addCommand(getSwitcher());
+			mapScreen.setCommandListener(this);
+		}
+		return mapScreen;
 	}
 	public List getStartMenu () {
 		if (startMenu == null) {
 			startMenu = new List("Powerpath Girl",Choice.IMPLICIT);
 			startMenu.append("Search",null);
-			startMenu.append("Browse",null);
+			startMenu.append("Help",null);
 			startMenu.append("About",null);
 			startMenu.addCommand(getEndApp());
 			startMenu.setCommandListener(this);
@@ -144,41 +202,12 @@ public class MainMIDlet extends MIDlet implements CommandListener, ItemStateList
 		}
 		return selectList;
 	}
-	public Command getBackToInput() {
-		if (backToInput == null) {
-			backToInput = new Command("Back", Command.BACK, 0);
-		}
-		return backToInput;
-	}
-	public Command getEndApp () {
-		if (endApp == null) {
-			endApp = new Command("Exit", Command.EXIT, 0);
-		}
-		return endApp;
-	}
-	public Command getBackToMenu () {
-		if (backToMenu == null) {
-			backToMenu = new Command("Back", Command.BACK, 0);		
-		}
-		return backToMenu;
-	}
-	public Command getSearchPath () {
-		if (searchPath == null) {
-			searchPath = new Command("GO", Command.ITEM, 0); 
-		}
-		return searchPath;
-	}
-	public Command getSelect (){
-		if (select == null){
-			select = new Command("Search", Command.OK, 0);
-		}
-		return select;
-	}
 	public Form getInputScreen () {
 		if (inputScreen == null) {
 			inputScreen = new Form("Powerpath Girl", new Item[] {getStartLoc(), getEndLoc(), getStatus()});
 			inputScreen.addCommand(getBackToMenu());
 			inputScreen.addCommand(getSearchPath());
+			inputScreen.addCommand(getClearInput());
 			inputScreen.setCommandListener(this);
 			inputScreen.setItemStateListener(this);
 			this.signal = 0;
@@ -203,44 +232,80 @@ public class MainMIDlet extends MIDlet implements CommandListener, ItemStateList
 		}
 		return browseScreen;
 	}
-	public TextField getStartLoc () {
-		if (startLoc == null) {
-			startLoc = new TextField("Starting Location",null,30,TextField.ANY);
+	public Form getDirections () {
+		if (directions == null) {
+			directions = new Form("Directions", new Item[] {getDirectionText()});
+			directions.addCommand(getBackToInput());
+			directions.addCommand(getSwitcher());
+			directions.setCommandListener(this);
 		}
+		return directions;
+	}
+	public Command getSelect (){
+		if (select == null) select = new Command("Search", Command.OK, 0);
+		return select;
+	}
+	public Command getBackToInput() {
+		if (backToInput == null) backToInput = new Command("Back", Command.BACK, 0);
+		return backToInput;
+	}
+	public Command getEndApp () {
+		if (endApp == null) endApp = new Command("Exit", Command.EXIT, 0);
+		return endApp;
+	}
+	public Command getBackToMenu () {
+		if (backToMenu == null) backToMenu = new Command("Back", Command.BACK, 0);		
+		return backToMenu;
+	}
+	public Command getClearInput () {
+		if (clearInput == null) clearInput = new Command("Clear", Command.ITEM, 0);		
+		return clearInput;
+	}
+	public Command getSearchPath () {
+		if (searchPath == null) searchPath = new Command("GO", Command.ITEM, 0); 
+		return searchPath;
+	}
+	public Command getSwitcher () {
+		if (switcher == null) switcher = new Command("Switch", Command.ITEM, 0); 
+		return switcher;
+	}
+	public TextField getStartLoc () {
+		if (startLoc == null) startLoc = new TextField("Starting Location","",70,TextField.ANY);
 		return startLoc;
 	}
 	public TextField getEndLoc () {
-		if (endLoc == null) {
-			endLoc = new TextField("Ending Location",null,30,TextField.ANY);
-		}
+		if (endLoc == null) endLoc = new TextField("Ending Location","",70,TextField.ANY);
 		return endLoc;
 	}
 	public StringItem getStatus() {
-		if (status == null) {
-			status = new StringItem("",null);
-		}
+		if (status == null) status = new StringItem("",null);
 		return status;
 	}
+	public StringItem getDirectionText() {
+		if (dir == null) dir = new StringItem("",null);
+		return dir;
+	}
 	public StringItem getAboutText() {
-		if (aboutText == null) {
-			aboutText = new StringItem("Powerpath Girl v2.1\n\nCS 192 Project\n2nd Semester SY 2011-2012\n\n","Authors:\nCueto, Jan Colin\nMagno, Jenny\nQuilab, Francis Miguel");
-		}
+		if (aboutText == null) aboutText = new StringItem("Powerpath Girl v3.4"
+				  + "","\nCS 192 Project\n2nd Semester SY 2011-2012\n\nAuthors:\nCueto, Jan Colin\nMagno, Jenny\nQuilab, Francis Miguel");
 		return aboutText;
 	}
 	public StringItem getIdxText() {
 		if (idxText == null) {
-			idxText = new StringItem("List of Buildings:\n",null);
+			String list = "Powerpath Girl is a shortest path finder between two buildings in the University of the Philippines - Diliman.\n\n"+"To start searching for a path, type inside any of the textboxes. You are allowed to type the name or aliases of the building. You will be directed to a list of buildings if the input is recognized.\n\nYou may clear the contents of the textboxes by pressing CLEAR.\n\nYou may also go back to the menu screen by pressing BACK.\n\nAfter both textboxes are filled, press GO.\n\nThe screen will display the shortest path via walking together with the map of UP Diliman.\n\nPressing UP, DOWN, LEFT and RIGHT keys will pan the map.\n\nThe SWITCH command changes the current display between the shortest path via walking and via riding a jeep.\n\nPressing BACK will redirect the user back to the input screen.";
+			idxText = new StringItem(null,list);
 		}
 		return idxText;
 	}
 	
 	public void initialize() {
-		bList = new Buildings[5];
-		bList[0] = new Buildings("Molave Residence Hall", "Molave", "Dormitory", "Residence Hall", "Molav", 0, 0, 0, 0);
-		bList[1] = new Buildings("Sanggumay Residence Hall", "Sanggumay", "Dormitory", "Residence Hall", "Sangumay", 0, 0, 0, 0);
-		bList[2] = new Buildings("Kalayaan Residence Hall", "Kalayaan", "Dormitory", "Residence Hall", "Kalay", 0, 0, 0, 0);
-		bList[3] = new Buildings("Yakal Residence Hall", "Yakal", "Dormitory", "Residence Hall", "Yackal", 0, 0, 0, 0);
-		bList[4] = new Buildings("Ipil Residence Hall", "Ipil", "Dormitory", "Residence Hall", "Ippil", 0, 0, 0, 0);
+		bList = new Buildings[63];
+		graph = new MapList[63];
+		Initializer init = new Initializer();
+		init.initData(bList, graph);
+		
+		wpf = new WPF (graph);
+		jpf = new JPF (graph);
 	}
 	public void startMIDlet() {
 		switchDisplayable(null, getStartMenu());
